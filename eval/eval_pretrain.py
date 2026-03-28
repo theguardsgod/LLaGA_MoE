@@ -80,13 +80,13 @@ def eval_model(args):
     model = model.to(torch.float16).cuda()
     # data_dir=os.path.expanduser(args.data_dir)
     if args.dataset == "arxiv":
-        data_dir = "dataset/ogbn-arxiv"
+        data_dir = "/localnvme/llaga/dataset/ogbn-arxiv"
     elif args.dataset == "products":
-        data_dir = "dataset/ogbn-products"
+        data_dir = "/localnvme/llaga/dataset/ogbn-products"
     elif args.dataset == "pubmed":
-        data_dir = "dataset/pubmed"
+        data_dir = "/localnvme/llaga/dataset/pubmed"
     elif args.dataset == "cora":
-        data_dir = "dataset/cora"
+        data_dir = "/localnvme/llaga/dataset/cora"
     else:
         print(f"{args.dataset} not exists")
         raise ValueError
@@ -134,7 +134,7 @@ def eval_model(args):
     if args.template == "ND":
         pretrained_emb = load_pretrain_embedding_graph(data_dir, args.pretrained_embedding_type)
         structure_emb = torch.load(
-            f"dataset/laplacian_{args.use_hop}_{args.sample_neighbor_size}.pt")
+            f"/localnvme/llaga/dataset/laplacian_{args.use_hop}_{args.sample_neighbor_size}.pt")
 
     elif args.template == "HO":
         n = data.num_nodes

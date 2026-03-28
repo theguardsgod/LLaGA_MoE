@@ -22,7 +22,7 @@ def get_sbert_embedding(model_type, texts, device):
     return torch.tensor(sbert_embeds)
 
 def eval_arxiv_nd(res_path):
-    data=torch.load("dataset/ogbn-arxiv/processed_data.pt")
+    data=torch.load("/localnvme/llaga/dataset/ogbn-arxiv/processed_data.pt")
     labels=data.label_texts
     short_labels = [l[0:5] for l in labels]
     ys=data.y.numpy().tolist()
@@ -65,7 +65,7 @@ def eval_arxiv_nd(res_path):
 
 
 def eval_arxiv_nc(res_path):
-    data=torch.load("dataset/ogbn-arxiv/processed_data.pt")
+    data=torch.load("/localnvme/llaga/dataset/ogbn-arxiv/processed_data.pt")
     labels=data.label_texts
     short_labels = [l[0:5] for l in labels]
     ys=data.y.numpy().tolist()
@@ -149,7 +149,7 @@ def eval_lprank(res_path):
 # here
 def eval_products_nc(res_path):
     eval_set = set()
-    data=torch.load("dataset/ogbn-products/processed_data.pt")
+    data=torch.load("/localnvme/llaga/dataset/ogbn-products/processed_data.pt")
     labels=data.label_names
     ys=data.y.numpy().tolist()
 
@@ -181,7 +181,7 @@ def eval_products_nc(res_path):
 
 def eval_products_nd(res_path):
     eval_set = set()
-    data=torch.load("dataset/ogbn-products/processed_data.pt")
+    data=torch.load("/localnvme/llaga/dataset/ogbn-products/processed_data.pt")
     labels=data.label_names
     ys=data.y.numpy().tolist()
 
@@ -223,7 +223,7 @@ def eval_products_nd(res_path):
 
 
 def eval_pubmed_nc(res_path):
-    data=torch.load("dataset/pubmed/processed_data.pt")
+    data=torch.load("/localnvme/llaga/dataset/pubmed/processed_data.pt")
     labels=data.label_texts
     short_labels = [l[18:] for l in labels]
     ys=data.y.numpy().tolist()
@@ -253,7 +253,7 @@ def eval_pubmed_nc(res_path):
 
 
 def eval_pubmed_nd(res_path):
-    data = torch.load("dataset/pubmed/processed_data.pt")
+    data = torch.load("/localnvme/llaga/dataset/pubmed/processed_data.pt")
     labels = data.label_texts
     short_labels = [l[18:] for l in labels]
     ys = data.y.numpy().tolist()
@@ -297,7 +297,7 @@ def eval_pubmed_nd(res_path):
 
 
 def eval_cora_nc(res_path):
-    data=torch.load("dataset/cora/processed_data.pt")
+    data=torch.load("/localnvme/llaga/dataset/cora/processed_data.pt")
     labels=data.label_texts
     short_labels = [l.split('_')[0] for l in labels]
     ys=data.y.numpy().tolist()
@@ -320,7 +320,7 @@ def eval_cora_nc(res_path):
 
 
 def eval_cora_nd(res_path):
-    data = torch.load("dataset/cora/processed_data.pt")
+    data = torch.load("/localnvme/llaga/dataset/cora/processed_data.pt")
     labels = data.label_texts
     ys = data.y.numpy().tolist()
 

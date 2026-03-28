@@ -68,12 +68,19 @@ elif [ ${model} = "opt_2.7b_4hop" ]; then
   model_base=facebook/opt-2.7b
   max_len=1536
   mode="v1"
+elif [ ${model} = "vicuna_nodeonly" ]; then
+  use_hop=0
+  template="HO"
+  projector_type="linear"
+  prefix=llaga-vicuna-7b-${emb}-nodeonly-${projector_type}-projector
+  model_base=lmsys/vicuna-7b-v1.5-16k
+  mode="v1"
 fi
 
 
 echo "PREFIX:  ${prefix}"
 
-wandb offline
+wandb online
 echo deepspeed  --include localhost:0,1,2,3 --master_port 61000  train/train_mem.py \
 --deepspeed ./scripts/zero2.json \
 --model_name_or_path ${model_base} \
@@ -101,6 +108,7 @@ echo deepspeed  --include localhost:0,1,2,3 --master_port 61000  train/train_mem
 --gradient_checkpointing True \
 --lazy_preprocess True \
 --report_to wandb \
+--run_name "${prefix}_${task}_${dataset}" \
 --use_hop ${use_hop} \
 --sample_neighbor_size ${sample_size} \
 --mm_projector_type ${projector_type} \
@@ -135,6 +143,7 @@ deepspeed  --include localhost:0,1,2,3 --master_port 61000  train/train_mem.py \
 --gradient_checkpointing True \
 --lazy_preprocess True \
 --report_to wandb \
+--run_name "${prefix}_${task}_${dataset}" \
 --use_hop ${use_hop} \
 --sample_neighbor_size ${sample_size} \
 --mm_projector_type ${projector_type} \

@@ -602,13 +602,13 @@ class LazySupervisedGraphDataset(Dataset):
                 repeat=int(ds[1])
                 dataset=ds[0]
             if "arxiv" in dataset:
-                data_path = "dataset/ogbn-arxiv/processed_data.pt"
+                data_path = "/localnvme/llaga/dataset/ogbn-arxiv/processed_data.pt"
             elif "products"  in dataset:
-                data_path = "dataset/ogbn-products/processed_data.pt"
+                data_path = "/localnvme/llaga/dataset/ogbn-products/processed_data.pt"
             elif "pubmed"  in dataset:
-                data_path = "dataset/pubmed/processed_data.pt"
+                data_path = "/localnvme/llaga/dataset/pubmed/processed_data.pt"
             elif "cora"  in dataset:
-                data_path = "dataset/cora/processed_data.pt"
+                data_path = "/localnvme/llaga/dataset/cora/processed_data.pt"
             else:
                 print(f"{dataset} not exists!!!!")
                 raise ValueError
@@ -618,7 +618,7 @@ class LazySupervisedGraphDataset(Dataset):
             if data_args.template == "ND":
                 pretrained_emb = self.load_pretrain_embedding_graph(data_dir, data_args.pretrained_embedding_type)
                 self.structure_emb = torch.load(
-                    f"dataset/laplacian_{data_args.use_hop}_{data_args.sample_neighbor_size}.pt")
+                    f"/localnvme/llaga/dataset/laplacian_{data_args.use_hop}_{data_args.sample_neighbor_size}.pt")
             elif data_args.template == "HO":
                 pretrained_emb = self.load_pretrain_embedding_hop(data_dir, data_args.pretrained_embedding_type, data_args.use_hop)
                 # n = data.num_nodes
