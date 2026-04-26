@@ -70,7 +70,6 @@ class DataArguments:
     use_task:Optional[str] = field(default="nc")
     use_dataset:Optional[str] = field(default="arxiv")
     template: Optional[str] = field(default="ND")
-    nc_batch_size: Optional[int] = field(default=20, metadata={"help": "Number of nodes per batch NC sample"})
 
 
 
@@ -168,14 +167,15 @@ def find_all_linear_names(model):
     lora_module_names = set()
     for name, module in model.named_modules():
         if isinstance(module, cls):
+            # 排除mm_projector的层
+            if 'mm_projector' in name:
+                continue
             names = name.split('.')
             lora_module_names.add(names[0] if len(names) == 1 else names[-1])
 
-
-    if 'lm_head' in lora_module_names: # needed for 16-bit
+    if 'lm_head' in lora_module_names:
         lora_module_names.remove('lm_head')
     return list(lora_module_names)
-
 
 def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
                                    output_dir: str):
@@ -655,47 +655,6 @@ class LazySupervisedGraphDataset(Dataset):
                                 task_list_data_dict.append(l)
                     else:
                         raise ValueError
-                elif task == "nc_kv":
-                    # NC with restructured prompt (class list before <graph>) for KV-cache inference
-                    data_path = os.path.join(data_dir,
-                                             f"sampled_{data_args.use_hop}_{data_args.sample_neighbor_size}_train_kvcache.jsonl")
-                    if os.path.exists(data_path):
-                        with open(data_path, 'r') as file:
-                            for line in file:
-                                l = json.loads(line)
-                                l["dataset"] = dataset
-                                task_list_data_dict.append(l)
-                    else:
-                        raise ValueError(f"KV-cache NC data not found: {data_path}. Run scripts/restructure_nc_data.py first.")
-                elif task == "nc_kv5":
-                    # NC with 5 nodes per prompt, restructured for KV-cache inference
-                    batch_nc_size = getattr(data_args, 'nc_batch_size', 5)
-                    data_path = os.path.join(data_dir, f"kvcache_batch{batch_nc_size}_nc_train.jsonl")
-                    if os.path.exists(data_path):
-                        with open(data_path, 'r') as file:
-                            for line in file:
-                                l = json.loads(line)
-                                l["dataset"] = dataset
-                                task_list_data_dict.append(l)
-                    else:
-                        raise ValueError(f"KV-cache batch NC data not found: {data_path}. Run scripts/prepare_kvcache_batch_nc_data.py first.")
-                elif task == "nc_batch":
-                    # Batch NC: pre-generated data with N <graph> tokens per sample
-                    batch_nc_size = getattr(data_args, 'nc_batch_size', 20)
-                    if data_args.template == "HO":
-                        data_path = os.path.join(data_dir, f"batch{batch_nc_size}_nodeonly_nc_train.jsonl")
-                    else:
-                        data_path = os.path.join(data_dir, f"batch{batch_nc_size}_nc_train.jsonl")
-                    if os.path.exists(data_path):
-                        with open(data_path, 'r') as file:
-                            for line in file:
-                                l = json.loads(line)
-                                l["dataset"] = dataset
-                                task_list_data_dict.append(l)
-                    else:
-                        raise ValueError(
-                            f"Batch NC data not found: {data_path}. Run scripts/prepare_batch_nc_data.py first."
-                        )
                 elif task == "lp":
                     if data_args.template == "HO":
                         data_path = os.path.join(data_dir,
@@ -1087,7 +1046,10 @@ def _train():
 
     model.config.tune_mm_mlp_adapter = training_args.tune_mm_mlp_adapter = model_args.tune_mm_mlp_adapter
     if model_args.tune_mm_mlp_adapter:
-        model.requires_grad_(False)
+        if not training_args.lora_enable:
+            # 原逻辑：冻结整个模型，只训练projector
+            model.requires_grad_(False)
+        # 无论是否用LoRA，都确保projector可训练
         for p in model.get_model().mm_projector.parameters():
             p.requires_grad = True
 

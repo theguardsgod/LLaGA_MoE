@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-LLaGA (Large Language and Graph Assistant) — an ICML 2024 paper that integrates graph neural network representations with large language models for graph understanding tasks. It projects graph structure embeddings into the LLM token space via learned projectors.
+LLaGA (Large Language and Graph Assistant) in https://arxiv.org/pdf/2402.08170 — an ICML 2024 paper that integrates graph neural network representations with large language models for graph understanding tasks. It projects graph structure embeddings into the LLM token space via learned projectors.
 
 ## Environment Setup
 

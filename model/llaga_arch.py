@@ -362,6 +362,224 @@ class LlagaMetaForCausalLM(ABC):
 
         return None, attention_mask, past_key_values, new_input_embeds, new_labels
 
+    def prepare_inputs_labels_for_multimodal_with_graph_mask(
+        self, input_ids, attention_mask, past_key_values, labels, graphs, graph_emb
+    ):
+        if past_key_values is not None and graphs is not None and input_ids.shape[1] == 1:
+            attention_mask = torch.ones(
+                (attention_mask.shape[0], past_key_values[-1][-1].shape[-2] + 1),
+                dtype=attention_mask.dtype,
+                device=attention_mask.device,
+            )
+            graph_position_mask = torch.zeros_like(attention_mask, dtype=torch.bool)
+            return input_ids, attention_mask, past_key_values, None, labels, graph_position_mask
+
+        graph_features = self.encode_graphs(graphs, graph_emb)
+
+        new_input_embeds = []
+        new_labels = [] if labels is not None else None
+        new_attention_masks = []
+        new_graph_masks = []
+        cur_graph_idx = 0
+        for batch_idx, cur_input_ids in enumerate(input_ids):
+            cur_attention_mask = attention_mask[batch_idx]
+            if (cur_input_ids == GRAPH_TOKEN_INDEX).sum() == 0:
+                half_len = cur_input_ids.shape[0] // 2
+                cur_graph_features = graph_features[cur_graph_idx]
+                cur_input_embeds_1 = self.get_model().embed_tokens(cur_input_ids[:half_len])
+                cur_input_embeds_2 = self.get_model().embed_tokens(cur_input_ids[half_len:])
+                cur_input_embeds = torch.cat(
+                    [cur_input_embeds_1, cur_graph_features[0:0], cur_input_embeds_2], dim=0
+                )
+                new_input_embeds.append(cur_input_embeds)
+                new_attention_masks.append(cur_attention_mask)
+                new_graph_masks.append(torch.zeros_like(cur_attention_mask, dtype=torch.bool))
+                if labels is not None:
+                    new_labels.append(labels[batch_idx])
+                cur_graph_idx += 1
+                continue
+
+            graph_token_indices = torch.where(cur_input_ids == GRAPH_TOKEN_INDEX)[0]
+            cur_new_input_embeds = []
+            cur_new_attn_masks = []
+            cur_new_graph_masks = []
+            if labels is not None:
+                cur_labels = labels[batch_idx]
+                cur_new_labels = []
+                assert cur_labels.shape == cur_input_ids.shape
+            while graph_token_indices.numel() > 0:
+                cur_graph_features = graph_features[cur_graph_idx]
+                cur_graph = graphs[cur_graph_idx]
+                cur_graph_mask = (cur_graph != DEFAULT_GRAPH_PAD_ID)
+                if hasattr(self.config, "mm_use_graph_special_token") and getattr(
+                    self.config, "mm_use_graph_special_token", False
+                ):
+                    cur_graph_features = self.inject_special_token(cur_graph_features)
+                    cur_graph_mask = torch.ones(
+                        cur_graph_features.shape[0], dtype=torch.bool, device=cur_graph_features.device
+                    )
+
+                graph_token_start = graph_token_indices[0]
+                if getattr(self.config, "tune_mm_mlp_adapter", False) and getattr(
+                    self.config, "mm_use_graph_start_end", False
+                ):
+                    prefix_ids = cur_input_ids[: graph_token_start - 1]
+                    graph_start_ids = cur_input_ids[graph_token_start - 1 : graph_token_start]
+                    graph_end_ids = cur_input_ids[graph_token_start + 1 : graph_token_start + 2]
+                    cur_new_input_embeds.append(self.get_model().embed_tokens(prefix_ids).detach())
+                    cur_new_input_embeds.append(self.get_model().embed_tokens(graph_start_ids))
+                    cur_new_input_embeds.append(cur_graph_features)
+                    cur_new_input_embeds.append(self.get_model().embed_tokens(graph_end_ids))
+
+                    cur_new_attn_masks.append(cur_attention_mask[:graph_token_start])
+                    cur_new_attn_masks.append(cur_graph_mask)
+                    cur_new_attn_masks.append(cur_attention_mask[graph_token_start + 1 : graph_token_start + 2])
+
+                    cur_new_graph_masks.append(
+                        torch.zeros(graph_token_start, dtype=torch.bool, device=cur_graph_mask.device)
+                    )
+                    cur_new_graph_masks.append(cur_graph_mask)
+                    cur_new_graph_masks.append(torch.zeros(1, dtype=torch.bool, device=cur_graph_mask.device))
+                    if labels is not None:
+                        cur_new_labels.append(cur_labels[:graph_token_start])
+                        cur_new_labels.append(
+                            torch.full(
+                                (cur_graph_features.shape[0],),
+                                IGNORE_INDEX,
+                                device=labels.device,
+                                dtype=labels.dtype,
+                            )
+                        )
+                        cur_new_labels.append(cur_labels[graph_token_start : graph_token_start + 1])
+                        cur_labels = cur_labels[graph_token_start + 2 :]
+                else:
+                    prefix_ids = cur_input_ids[:graph_token_start]
+                    cur_new_input_embeds.append(self.get_model().embed_tokens(prefix_ids))
+                    cur_new_input_embeds.append(cur_graph_features)
+
+                    cur_new_attn_masks.append(cur_attention_mask[:graph_token_start])
+                    cur_new_attn_masks.append(cur_graph_mask)
+
+                    cur_new_graph_masks.append(
+                        torch.zeros(graph_token_start, dtype=torch.bool, device=cur_graph_mask.device)
+                    )
+                    cur_new_graph_masks.append(cur_graph_mask)
+                    if labels is not None:
+                        cur_new_labels.append(cur_labels[:graph_token_start])
+                        cur_new_labels.append(
+                            torch.full(
+                                (cur_graph_features.shape[0],),
+                                IGNORE_INDEX,
+                                device=labels.device,
+                                dtype=labels.dtype,
+                            )
+                        )
+                        cur_labels = cur_labels[graph_token_start + 1 :]
+
+                cur_graph_idx += 1
+                if getattr(self.config, "tune_mm_mlp_adapter", False) and getattr(
+                    self.config, "mm_use_graph_start_end", False
+                ):
+                    cur_input_ids = cur_input_ids[graph_token_start + 2 :]
+                    cur_attention_mask = cur_attention_mask[graph_token_start + 2 :]
+                else:
+                    cur_input_ids = cur_input_ids[graph_token_start + 1 :]
+                    cur_attention_mask = cur_attention_mask[graph_token_start + 1 :]
+                graph_token_indices = torch.where(cur_input_ids == GRAPH_TOKEN_INDEX)[0]
+
+            if cur_input_ids.numel() > 0:
+                if getattr(self.config, "tune_mm_mlp_adapter", False) and getattr(
+                    self.config, "mm_use_graph_start_end", False
+                ):
+                    cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids).detach())
+                else:
+                    cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids))
+                cur_new_attn_masks.append(cur_attention_mask)
+                cur_new_graph_masks.append(torch.zeros_like(cur_attention_mask, dtype=torch.bool))
+                if labels is not None:
+                    cur_new_labels.append(cur_labels)
+
+            cur_new_input_embeds = [x.to(device=self.device) for x in cur_new_input_embeds]
+            cur_new_input_embeds = torch.cat(cur_new_input_embeds, dim=0)
+            cur_new_attn_masks = [x.to(device=self.device) for x in cur_new_attn_masks]
+            cur_new_attn_masks = torch.cat(cur_new_attn_masks, dim=0)
+            cur_new_graph_masks = [x.to(device=self.device) for x in cur_new_graph_masks]
+            cur_new_graph_masks = torch.cat(cur_new_graph_masks, dim=0)
+            new_input_embeds.append(cur_new_input_embeds)
+            new_attention_masks.append(cur_new_attn_masks)
+            new_graph_masks.append(cur_new_graph_masks)
+            if labels is not None:
+                cur_new_labels = torch.cat(cur_new_labels, dim=0)
+                new_labels.append(cur_new_labels)
+
+        if any(x.shape != new_input_embeds[0].shape for x in new_input_embeds):
+            max_len = max(x.shape[0] for x in new_input_embeds)
+
+            new_input_embeds_align = []
+            new_attention_masks_align = []
+            new_graph_masks_align = []
+            for cur_new_embed, cur_attn_mask, cur_graph_mask in zip(
+                new_input_embeds, new_attention_masks, new_graph_masks
+            ):
+                pad_len = max_len - cur_new_embed.shape[0]
+                cur_new_embed = torch.cat(
+                    (
+                        cur_new_embed,
+                        torch.zeros(
+                            (pad_len, cur_new_embed.shape[1]),
+                            dtype=cur_new_embed.dtype,
+                            device=cur_new_embed.device,
+                        ),
+                    ),
+                    dim=0,
+                )
+                cur_attn_mask = torch.cat(
+                    (
+                        cur_attn_mask,
+                        torch.full((pad_len,), False, dtype=cur_attn_mask.dtype, device=cur_attn_mask.device),
+                    ),
+                    dim=0,
+                )
+                cur_graph_mask = torch.cat(
+                    (
+                        cur_graph_mask,
+                        torch.full((pad_len,), False, dtype=cur_graph_mask.dtype, device=cur_graph_mask.device),
+                    ),
+                    dim=0,
+                )
+                new_input_embeds_align.append(cur_new_embed)
+                new_attention_masks_align.append(cur_attn_mask)
+                new_graph_masks_align.append(cur_graph_mask)
+            new_input_embeds = torch.stack(new_input_embeds_align, dim=0)
+            attention_mask = torch.stack(new_attention_masks_align, dim=0)
+            graph_position_mask = torch.stack(new_graph_masks_align, dim=0)
+
+            if labels is not None:
+                new_labels_align = []
+                for cur_new_label in new_labels:
+                    cur_new_label = torch.cat(
+                        (
+                            cur_new_label,
+                            torch.full(
+                                (max_len - cur_new_label.shape[0],),
+                                IGNORE_INDEX,
+                                dtype=cur_new_label.dtype,
+                                device=cur_new_label.device,
+                            ),
+                        ),
+                        dim=0,
+                    )
+                    new_labels_align.append(cur_new_label)
+                new_labels = torch.stack(new_labels_align, dim=0)
+        else:
+            new_input_embeds = torch.stack(new_input_embeds, dim=0)
+            attention_mask = torch.stack(new_attention_masks, dim=0)
+            graph_position_mask = torch.stack(new_graph_masks, dim=0)
+            if labels is not None:
+                new_labels = torch.stack(new_labels, dim=0)
+
+        return None, attention_mask, past_key_values, new_input_embeds, new_labels, graph_position_mask
+
     def initialize_graph_tokenizer(self, model_args, tokenizer):
 
         if model_args.mm_use_graph_start_end:

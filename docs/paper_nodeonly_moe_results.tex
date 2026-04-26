@@ -1,0 +1,26 @@
+% Requires: \usepackage{booktabs}
+
+\begin{table}[htbp]
+\centering
+\caption{Node classification evaluation results for the original LLaGA projector model, Only Node, and MoE. Methods are listed vertically and datasets horizontally.}
+\label{tab:paper-nodeonly-moe-results}
+\begin{tabular}{lllll}
+\toprule
+Method & arxiv & products & pubmed & cora \\
+\midrule
+Paper Original & 75.09\% & 82.25\% / 84.26\% & 89.22\% / 89.25\% & 61.44\% \\
+Only Node      & 74.16\% & 80.61\% / 81.34\% & N/A               & N/A \\
+MoE            & 75.14\% & 81.65\% / 83.16\% & 91.53\% / 91.53\% & 62.92\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% Notes:
+% 1. "Paper Original" here refers to the original projector-based LLaGA checkpoint/results.
+% 2. Scores were obtained from:
+%    - /localnvme/llaga/eval_output/projector_nc_{dataset}.jsonl
+%    - /localnvme/llaga/eval_output/nodeonly_nc_{dataset}.jsonl
+%    - /localnvme/llaga/eval_output/moe_nc_{dataset}.jsonl
+% 3. The arxiv "Paper Original" and "MoE" values match docs/MoE_Implementation.md.
+% 4. Only Node results for pubmed/cora were not available as stable completed evaluation outputs in the current workspace.
+% 5. For arxiv/products/pubmed, cells are reported as strict_acc or strict_acc / overall_acc when both are available.

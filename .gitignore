@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+checkpoints/
+wandb/
+results/
+.claude/
+.codex
+*.egg-info/
+dist/
+build/
+=*
